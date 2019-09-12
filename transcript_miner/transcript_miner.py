@@ -29,8 +29,8 @@ def valid_pdf(pdf):
 
     valid_headings = [i[0].text.strip(" ") == pageheading.strip(" ")
                       for i in pageheadings].count(True) == len(pdf.pq('LTFigure'))
-    valid_pagewidth = 792 == round(float(pdf.get_layout(1).bbox[2]))
-    valid_pageheight = 612 == round(float(pdf.get_layout(1).bbox[3]))
+    valid_pagewidth = PAGEWIDTH == round(float(pdf.get_layout(1).bbox[2]))
+    valid_pageheight = PAGEHEIGHT == round(float(pdf.get_layout(1).bbox[3]))
 
     return all([valid_headings, valid_pagewidth, valid_pageheight])
 
@@ -451,8 +451,7 @@ def scrape_targets(pdf, x0, y0, y1, pageid):
                                                         "pageid": pageid})
     return targets
 
-
-def gen_csv(pdf, colleges, filename_out):
+def prepare_records(pdf, colleges):
     """
     Args:
         filename_out: name of csv file to output
@@ -475,11 +474,23 @@ def gen_csv(pdf, colleges, filename_out):
                 )
 
     try:
-        pd.DataFrame(courses).drop('missing', 1).to_csv(filename_out, index=False)
-    except Exception as e:
+        records = pd.DataFrame(courses).drop('missing', 1)
+    except:
         try:
-            pd.DataFrame(courses).to_csv(filename_out, index=False)
-        except:
+            records = pd.DataFrame(courses)
+        except Exception as e:
             print(e)
+            return -1
+
+    return records
+
+def gen_csv(records, filename_out):
+    """
+    Args:
+        filename_out: name of csv file to output
+        pdf: loaded pdfquery pdf object
+        colleges: dict of dicts of dataframes containing label instances
+    """
+    records.to_csv(filename_out, index=False)
 
 # !SECTION

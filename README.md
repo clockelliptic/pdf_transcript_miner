@@ -1,3 +1,9 @@
+**Developers**
+
+View utility docs here: https://clockelliptic.github.io/pdf_transcript_miner/
+
+-------------------------------------------------------------------------------------
+
 **Production Instructions**
 
 Dev branch is configured to compile to a single-file executable using Nuitka compiler. 

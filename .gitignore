@@ -4,8 +4,6 @@
 # testing
 /coverage
 
-# dev
-/dev
 /nuitka-cc_build
 
 # misc
@@ -16,11 +14,3 @@
 .env.production.local
 .ipynb_checkpoints
 .vscode
-
-# release files
-/product
-/main.dist
-/release/main.dist
-/release/dev
-/release/product
-/release

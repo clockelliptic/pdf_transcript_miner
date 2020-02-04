@@ -2,6 +2,8 @@
 
 View utility docs here: https://clockelliptic.github.io/pdf_transcript_miner/
 
+*Sample data for testing the utility can be found in the* `/data` *directory*.
+
 -------------------------------------------------------------------------------------
 
 **Production Instructions**

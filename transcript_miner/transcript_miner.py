@@ -15,6 +15,27 @@ PAGEHEIGHT = 612
 TOP_OF_PAGE = 523
 BOTTOM_OF_PAGE = 72
 
+COL1_X_VALS = {
+   # 'key':        (x0 , x1),
+    'dept':        (71 ,121),
+    'seq':         (122,160),
+    'description': (161,236),
+    'attempted':   (237,279),
+    'earned':      (280,312),
+    'grade':       (313,349),
+    'points':      (350,395),
+}
+
+COL2_X_VALS = {
+    # 'key':       (x0 , x1),
+    'dept':        (421,470),
+    'seq':         (471,510),
+    'description': (511,585),
+    'attempted':   (586,629),
+    'earned':      (630,660),
+    'grade':       (661,699),
+    'points':      (700,791),
+}
 
 # ANCHOR: valid_pdf()
 def valid_pdf(pdf):
@@ -37,419 +58,282 @@ def valid_pdf(pdf):
 # ANCHOR: scrape_labels()
 def define_college_sections(pdf, figures):
     """
-    Returns dict of Pandas DataFrames
+    Returns Pandas DataFrame.
 
     Args:
         pdf: loaded pdfquery pdf object
         figures: list of LTFigure objects scraped from the PDF
     """
-
-    raw_scrape = {"Beginning": []}
-
+    colleges = []
+    idx=0
     for figure in figures:
         pageid = float(figure.iterancestors('LTPage').__next__().layout.pageid)
         for instance_wrapper in figure:
             for instance in instance_wrapper.getchildren():
                 if "----------Beginning" in instance.text:
-                    raw_scrape["Beginning"].append(dict(instance.attrib,
-                                                    **{"pageid":pageid,
-                                                        "-y0":-1 * float(instance.get('y0')),
-                                                        "text": instance.text,
-                                                        "pageside":
-                                                        float(instance.attrib['x0']) > HALFPAGEWIDTH
-                                                    }))
+                    new_attribs = {"name": instance.text.split(" ")[2],
+                                   "n":idx,
+                                   "pageid": pageid,
+                                   "last_pageid": None,
+                                # '-y0' and 'pageside' are for easy top-to-bottom sorting
+                                   "-y0": -1*float(instance.get('y0')),
+                                   "pageside": float(instance.attrib['x0']) > HALFPAGEWIDTH,
+                                   "semesters": object,}
+                    colleges.append(dict(instance.attrib, **new_attribs))
+                    idx+=1
 
-        _instances = raw_scrape
-        instances = dict()
+    colleges = pd.DataFrame.from_records(colleges, index=("n", "name"))
+    colleges = colleges.apply(lambda df_col: \
+                                pd.to_numeric(df_col, errors='ignore')).round(decimals=0)
 
-        if len(_instances["Beginning"]) > 0:
-            instances["Beginning"] = \
-            pd.DataFrame.from_records(_instances["Beginning"]).apply( \
-                                    lambda df_col: pd.to_numeric(df_col, \
-                                        errors='ignore')).round(decimals=0)
+    return __find_college_section_ends(colleges, len(figures))
 
-    return find_college_section_ends(instances, len(figures))
-
-# ANCHOR: define_college_sections()
-def find_college_section_ends(instances, maxpageid):
+# ANCHOR: __find_college_section_ends()
+def __find_college_section_ends(colleges, maxpageid):
     """
-    Adds a column to the instances["Beginning"] dataframe which indicates
-    the last page of that college section of the given transcript.
-
-    Returns a dict of pandas dataframes.
+    Returns a Pandas DataFrame
 
     Args:
-        instances: dict of pandas dataframes containng label instances
+        colleges: pandas dataframe
         maxpageid: the page number of the final page of the transcript
     """
-    instances['Beginning']['last_pageid'] = 0
     # find the pageid of the last page of each college section
-    for n, row in instances['Beginning'].iterrows():
-        if n < (len(instances['Beginning']) - 1):
-            instances["Beginning"].at[n, 'last_pageid'] = instances['Beginning'].at[n+1, 'pageid'] - 1
+    for n, row in colleges.iterrows():
+        if n[0] < (len(colleges) - 1):
+            colleges.xs(n[0]).at[n[1], 'last_pageid'] = colleges.iloc[n[0]+1].pageid - 1
+        else:
+            colleges.xs(n[0]).at[n[1], 'last_pageid'] = maxpageid
+    return colleges
 
-        elif n == (len(instances['Beginning']) - 1):
-            instances["Beginning"].at[n, 'last_pageid'] = maxpageid
-
-    return instances
-
-# ANCHOR: scrape_labels()
-def scrape_labels(pdf, beginning_label_instances, figures):
+# ANCHOR: scrape_semesters_and_plans()
+def scrape_semesters_and_plans(pdf, figures):
     """
-    Returns a dict() containing key-value pairs for each label (text) that we
-    want to search for in the PDF. The values of the dict contain lists of
-    instances of each label and their respective meta-data (i.e. position on
-    page, pageid, etc.). The keys are the labels.
-
     Args:
         pdf: loaded pdfquery pdf object
         figures: list of LTFigure objects scraped from the PDF
     """
 
-    semesters = ("Spring", "Summer", "Fall", "Winter",)
-    labels = ("Plan", "Course", "Description", "Grade", "Attempted", "Earned", "Points")
+    seasons = ["Spring", "Summer", "Fall", "Winter",]
+    labels = ["Plan",]
 
-    raw_scrape = dict()
-    for label in labels:
-        raw_scrape[label] = []
-    raw_scrape['semester'] = []
+    plans = []
+    semesters = []
 
     for figure in figures:
         pageid = float(figure.iterancestors('LTPage').__next__().layout.pageid)
 
-        for label in labels+semesters:
+        for label in seasons+labels:
             for instance_wrapper in figure:
                 for instance in instance_wrapper.getchildren():
                     if label in instance.text:
-                        if any([s in label for s in semesters]):
-                            raw_scrape['semester'].append(dict(instance.attrib,
-                                                          **{"pageid":pageid,
-                                                             "-y0":-1 * float(instance.get('y0')),
-                                                             "text": instance.text,
-                                                             "pageside":
-                                                             float(instance.attrib['x0']) > HALFPAGEWIDTH
-                                                            }))
+                        if any([s in label for s in seasons]):
+                            attribs = instance.attrib
+                            plan_name = attribs
+                            new_attribs ={"name": instance.text,
+                                          "plan": "",
+                                          "courses": object,
+                                          "pageid":pageid,
+                                          "end_pageid": None,
+                                          "end_x": None,
+                                          "end_y": None,
+                                          "-y0":-1 * float(instance.get('y0')),
+                                          "pageside": float(instance.attrib['x0']) > HALFPAGEWIDTH,
+                                          "end_pageside": False #placeholder value
+                                         }
+                            semesters.append(dict(attribs, **new_attribs))
+
                         elif label == instance.text.strip(" ").strip(":"):
-                            raw_scrape[label].append(dict(instance.attrib,
-                                                          **{"pageid":pageid,
-                                                             "-y0":-1 * float(instance.get('y0')),
-                                                             "text": instance.text,
-                                                             "pageside":
-                                                             float(instance.attrib['x0']) > HALFPAGEWIDTH
-                                                            }))
+                            plans.append(instance.text) # TODO: FIX: needs to append target, not label
 
-        _instances = raw_scrape
-        instances = dict(beginning_label_instances)
+    for n, plan in enumerate(plans):
+        semesters[n]['plan'] = plan
 
-        for label in _instances.keys():
-            if len(_instances[label]) > 0:
-                instances[label] = \
-                pd.DataFrame.from_records(_instances[label]).apply( \
-                                        lambda df_col: pd.to_numeric(df_col, \
-                                            errors='ignore')).round(decimals=0)
+    semesters = pd.DataFrame.from_records(semesters).apply( \
+                                lambda df_col: pd.to_numeric(df_col, \
+                                    errors='ignore')).round(decimals=0)
 
-    return instances
+    semesters = semesters.sort_values(by=["pageid", "pageside", "-y0"])
+    semesters = semesters.reset_index(drop=True)
+    semesters.index = semesters.index.rename('n')
+    semesters = semesters.set_index([semesters.index, 'name'])
 
+    return __find_semester_section_ends(pdf, figures, semesters)
 
-# ANCHOR: clean_labels()
-def clean_labels(instances):
-    """
-    Cleans and sorts label instances.
+# ANCHOR: __find_semester_section_ends()
+def __find_semester_section_ends(pdf, figures, semesters):
+    label = "Points"
+    points = []
+    idx=0
 
-    Returns a dict of pandas dataframes.
+    for figure in figures:
+        pageid = float(figure.iterancestors('LTPage').__next__().layout.pageid)
+        for instance_wrapper in figure:
+            for instance in instance_wrapper.getchildren():
+                if label in instance.text:
+                    attribs = instance.attrib
+                    plan_name = attribs
+                    new_attribs ={"pageid":pageid,
+                                  "-y0":-1 * float(instance.get('y0')),
+                                  "pageside": float(instance.attrib['x0']) > HALFPAGEWIDTH
+                                  }
+                    points.append(dict(attribs, **new_attribs))
 
-    Args:
-        instances: dict of pandas dataframes containng label instances
-    """
-    # skip every third instance of these labels
-    skip_third = ["Points"]
-    # skip every second and third instance of these labels
-    skip_secondthird = ["Attempted", "Earned"]
+    points = pd.DataFrame.from_records(points).apply( \
+                                lambda df_col: pd.to_numeric(df_col, \
+                                    errors='ignore')).round(decimals=0)
+    points = points.sort_values(by=["pageid", "pageside", "-y0"]).reset_index(drop=True)
+    points = points[(points.index - 1)%3==0].reset_index(drop=True)
 
-    # all labels
-    labels = ["Beginning", "Plan", "Course", "Description",
-              "Grade", "Points", "Attempted", "Earned", "semester"]
+    for i, row in semesters.iterrows():
+        semesters.xs(i[0]).at[i[1], 'end_pageid'] = points.iloc[i[0]].pageid
+        semesters.xs(i[0]).at[i[1], 'end_x'] = points.iloc[i[0]].x1
+        semesters.xs(i[0]).at[i[1], 'end_y'] = points.iloc[i[0]].y0
+        semesters.xs(i[0]).at[i[1], 'end_pageside'] = float(points.iloc[i[0]].x0) > HALFPAGEWIDTH
 
-    for s in skip_third:
-        df = instances[s]
-        instances[s] = df[(df.index+1) %3 != 0].reset_index(drop=True)
+    return semesters
 
-    for s in skip_secondthird:
-        df = instances[s]
-        instances[s] = df[df.index %3 == 0].reset_index(drop=True)
-
-    instances['semester'] = instances['semester'].sort_values(by = ["pageid", "pageside", "-y0"]).reset_index(drop=True)
-    return instances
-
-# ANCHOR: group_label_instances_by_college()
-def group_label_instances_by_college(instances):
-    """
-    Returns a dict of dicts of pandas dataframes.
-
-    Args:
-        instances: dict of pandas dataframes containng label instances
-    """
-    colleges = dict()
-    labels = ["Beginning", "Plan", "Course", "Description",
-              "Grade", "Points", "Attempted", "Earned", "semester"]
-
-    for n, row in instances['Beginning'].iterrows():
-        collegename = row.text.split(" ")[2]
-        colleges[collegename] = dict()
-        for label in labels:
-            df = instances[label]
-
-            colleges[collegename][label] = df[ (
-                                    (df['pageid'] >= row['pageid']) & \
-                                    (df['pageid'] <= row['last_pageid'])
-                                ) &
-                                (
-                                    (
-                                        df['pageid'] > row['pageid']
-                                    ) |
-                                    (
-                                        (df['pageid'] == row['pageid']) &
-                                        (
-                                            (df['y0'] < row['y1']) |
-                                            (df['x0'] > HALFPAGEWIDTH)
-                                        )
-                                    )
-                                )].reset_index(drop=True)
+# ANCHOR: group_semesters_by_college()
+def group_semesters_by_college(colleges, semesters):
+    for n, row in colleges.iterrows():
+        pageid = colleges.iloc[n[0]].pageid
+        end_pageid = colleges.iloc[n[0]].last_pageid
+        colleges.xs(n[0]).at[n[1], 'semesters'] = semesters[(semesters['pageid'] >= pageid) & \
+                                                        (semesters['end_pageid'] <= end_pageid)]
     return colleges
 
-# ANCHOR: scrape_plans()
-def scrape_plans(pdf, colleges):
-    """
-    Adds a new column called 'targets' to the 'Plan' dataframe.
+# ANCHOR: scrape_courses()
+def scrape_courses(pdf, colleges):
+    #TODO: Fix, apparent not scraping course targets.
+    for n, college in colleges.iterrows():
+        for i, semester in college['semesters'].iterrows():
+            multipage = semester.pageid == semester.end_pageid
+            samecolumn = semester.pageside == semester.end_pageside
+            pageid = semester.pageid
+            if (samecolumn) and (not multipage):
+                y1 = semester.y0 - 18
+                y0 = semester.end_y
+                if not semester.pageside:
+                    x0 = COL1_X_VALS['dept'][0]
+                    x1 = COL1_X_VALS['dept'][1]
+                else:
+                    x0 = COL2_X_VALS['dept'][0]
+                    x1 = COL2_X_VALS['dept'][1]
+                # SCRAPE
+                courses = scrape_course_bbox(pdf, x0, y0, x1, y1, pageid)
 
-    Scrapes the names of the learning plans in each semester of the transcript into
-    this column.
+            elif (not samecolumn) and (not multipage):
+                y1 = semester.y0 - 18
+                y0 = BOTTOM_OF_PAGE
+                x0 = COL1_X_VALS['dept'][0]
+                x1 = COL1_X_VALS['dept'][1]
+                courses = scrape_course_bbox(pdf, x0, y0, x1, y1, pageid)
+                y1 = TOP_OF_PAGE
+                y0 = semester.end_y
+                x0 = COL2_X_VALS['dept'][0]
+                x1 = COL2_X_VALS['dept'][1]
+                courses.append(scrape_course_bbox(pdf, x0, y0, x1, y1, pageid))
 
-    Returns a dict of dicts of pandas dataframes.
+            elif (multipage):
+                y1 = semester.y0 - 18
+                y0 = BOTTOM_OF_PAGE
+                x0 = COL2_X_VALS['dept'][0]
+                x1 = COL2_X_VALS['dept'][1]
+                courses = scrape_course_bbox(pdf, x0, y0, x1, y1, pageid)
 
-    Args:
-        pdf: loaded pdfquery pdf object
-        colleges: dict of dicts of dataframes containing label instances
-    """
-    for college in colleges:
-        instances = colleges[college]
-        instances["Plan"]['target'] = ""
-        for n, row in instances['Plan'].iterrows():
-            x0 = row['x1'] -1
-            y0 = row['y0'] -1
-            x1 = row['x1'] + 300
-            y1 = row['y1'] +1
-            raw_scrape = pdf.pq('LTTextLineHorizontal:in_bbox("%s, %s, %s, %s")' % \
-                                                                (x0, y0, x1, y1))
-            for i in raw_scrape:
-                if i.iterancestors('LTPage').__next__().layout.pageid == row['pageid']:
-                    target_text = ''.join([j.text for j in i])
-                    target = dict(i.attrib, **{"text": target_text,
-                                               "pageid": row['pageid']} )
+                y1 = TOP_OF_PAGE
+                y0 = semester.end_y
+                x0 = COL2_X_VALS['dept'][0]
+                x1 = COL2_X_VALS['dept'][1]
+                courses.append(scrape_course_bbox(pdf, x0, y0, x1, y1, pageid+1))
 
-            instances["Plan"].at[n, 'target'] = target
-            colleges[college]["Plan"] = instances["Plan"]
+            #colleges.loc[n[1]].semesters.iloc[i[0]].courses = courses
+            colleges.xs(n[0]).at[n[1], 'semesters'].xs(i[0]).at[i[1], 'courses'] = courses
     return colleges
 
-# ANCHOR: scrape_course_targets()
-def scrape_course_targets(pdf, colleges):
+# ANCHOR: __prepare_courses()
+def __prepare_courses(pdf, courses):
     """
-    Scrapes the department, sequence, description/title, attempted, earned
-    grade, and points for each course in each semester.
+    Combines course departments and course numbers into single objects, then
+    scrapes target data (description, attempted credits, earned credits, etc...)
+    for each course object.
+
+    Returns pd.DataFrame
 
     Args:
-        pdf: loaded pdfquery pdf object
-        colleges: dict of dicts of dataframes containing label instances
+        courses: list of tuples, each containing pairs of dicts
     """
+    prepared_courses = []
+    for dept, seq in courses:
+        if not dept.pageside:
+            COLX = COL1_X_VALS
+        else:
+            COLX = COL2_X_VALS
+        course = {
+            "dept":        dept.text,
+            "seq":         seq.text,
+            "x0":          dept.x0,
+            "y0":          dept.y0,
+            "x1":          seq.x1,
+            "y1":          dept.y1,
+            "pageid":      dept.pageid,
+            "description": scrape_bbox(pdf, courses, COLX.description[0], dept.y0, COLX.description[1], dept.y1, dept.pageid),
+            "attempted":   scrape_bbox(pdf, courses, COLX.attempted[0], dept.y0, COLX.attempted[1], dept.y1, dept.pageid),
+            "earned":      scrape_bbox(pdf, courses, COLX.earned[0], dept.y0, COLX.earned[1], dept.y1, dept.pageid),
+            "grade":       scrape_bbox(pdf, courses, COLX.grade[0], dept.y0, COLX.grade[1], dept.y1, dept.pageid),
+            "points":      scrape_bbox(pdf, courses, COLX.points[0], dept.y0, COLX.points[1], dept.y1, dept.pageid),}
+        prepared_courses.append(course)
 
-    for college in colleges:
+    return pd.DataFrame.from_records(prepared_courses)
 
-        instances = colleges[college] #type: pd.DataFrame
-        instances['Course']['targets'] = object
+# ANCHOR: scrape_targets()
+def scrape_bbox(pdf, courses, x0, y0, x1, y1, pageid):
+    """
+    Returns dict
 
-        for n, row in instances['Course'].iterrows():
-            targets = {
-                        "dept":        [],
-                        "seq":         [],
-                        "description": [],
-                        "attempted":   [],
-                        "earned":      [],
-                        "grade":       [],
-                        "points":      []
-            }
-
-            # CASE: semester section starts on one page of the transcript and ends on the next
-            if instances["Points"].loc[n*2+1]['pageid'] > row['pageid']:
-                # scrape part on first page
-                depts, seqs = \
-                    scrape_course_dept_and_seq(
-                        pdf = pdf,
-                        pageid = row['pageid'],
-                        x0 = row['x0']-1,
-                        y0 = BOTTOM_OF_PAGE,
-                        x1 = instances['Description'].loc[n]['x0']+1,
-                        y1 = row['y0']+1,)
-                for dept, seq in zip(depts, seqs):
-                    targets['dept'].append(dept)
-                    targets['seq'].append(seq)
-                    targets_ = scrape_targets(pdf = pdf, x0 = 511, y0 = seq['y0'], y1 = seq['y1'], pageid = seq['pageid'])
-                    for key in targets_.keys():
-                        targets[key].append(targets_[key])
-
-                # scrape part on second page
-                depts, seqs = \
-                    scrape_course_dept_and_seq(
-                        pdf = pdf,
-                        pageid = row['pageid'],
-                        x0 = 0,
-                        y0 = instances["Points"].loc[n*2+1]['y1']-1,
-                        x1 = 162+1,
-                        y1 = TOP_OF_PAGE,)
-                for dept, seq in zip(depts, seqs):
-                    targets['dept'].append(dept)
-                    targets['seq'].append(seq)
-                    targets_ = scrape_targets(pdf = pdf, x0 = 161, y0 = seq['y0'], y1 = seq['y1'], pageid = seq['pageid'])
-                    for key in targets_.keys():
-                        targets[key].append(targets_[key])
-
-            # CASE: semester section starts in first column of page and ends in second column
-            elif instances["Points"].loc[n*2+1]['pageside'] != row['pageside']:
-                # scrape part in first column
-                depts, seqs = \
-                    scrape_course_dept_and_seq(
-                        pdf = pdf,
-                        pageid = row['pageid'],
-                        x0 = row['x0']-1,
-                        y0 = BOTTOM_OF_PAGE,
-                        x1 = instances['Description'].loc[n]['x0']+1,
-                        y1 = row['y0']+1,)
-                for dept, seq in zip(depts, seqs):
-                    targets['dept'].append(dept)
-                    targets['seq'].append(seq)
-                    targets_ = scrape_targets(pdf = pdf, x0 = 161, y0 = seq['y0'], y1 = seq['y1'], pageid = seq['pageid'])
-                    for key in targets_.keys():
-                        targets[key].append(targets_[key])
-
-                # scrape part in second column
-                depts, seqs = \
-                    scrape_course_dept_and_seq(
-                        pdf = pdf,
-                        pageid = row['pageid'],
-                        x0 = HALFPAGEWIDTH,
-                        y0 = instances["Points"].loc[n*2+1]['y1']-1,
-                        x1 = 512+1,
-                        y1 = TOP_OF_PAGE,)
-                for dept, seq in zip(depts, seqs):
-                    targets['dept'].append(dept)
-                    targets['seq'].append(seq)
-                    targets_ = scrape_targets(pdf = pdf, x0 = 511, y0 = seq['y0'], y1 = seq['y1'], pageid = seq['pageid'])
-                    for key in targets_.keys():
-                        targets[key].append(targets_[key])
-
-            # CASE: semester section starts and ends in same column on same page
+    Args:
+        pdf: loaded pdfquery object contianing transcript
+        courses: pd.DataFrame
+    """
+    raw_scrape = pdf.pq('LTTextLineHorizontal:in_bbox("%s, %s, %s, %s")' % \
+                                                      (x0, y0, x1, y1))
+    for i in raw_scrape:
+        if i.iterancestors('LTPage').__next__().layout.pageid == pageid:
+            if len(i) > 0:
+                for j in i:
+                    if j!=None and j.text!=None:
+                        target = dict(j.attrib, **{"text": j.text.strip(" "),
+                                                   "pageid": pageid})
             else:
-                depts, seqs = \
-                    scrape_course_dept_and_seq(
-                        pdf = pdf,
-                        pageid = row['pageid'],
-                        x0 = row['x0']-1,
-                        y0 = instances["Points"].loc[n*2+1]['y1']-1,
-                        x1 = instances['Description'].loc[n]['x0']+1,
-                        y1 = row['y0']+1,)
-                for dept, seq in zip(depts, seqs):
-                    targets['dept'].append(dept)
-                    targets['seq'].append(seq)
-                    if row['pageside'] == False:
-                        x0 = 161
-                    else:
-                        x0 = 511
-                    targets_ = scrape_targets(pdf = pdf, x0 = x0, y0 = seq['y0'], y1 = seq['y1'], pageid = seq['pageid'])
-                    for key in targets_.keys():
-                        targets[key].append(targets_[key])
+                if i!=None and i.text!=None:
+                    target = dict(i.attrib, **{"text": i.text.strip(" "),
+                                               "pageid": pageid})
+    return target
 
-            for label in targets.keys():
-                for target_instance in targets[label]:
-                    if target_instance != None:
-                        target_instance['label'] = label
-
-            instances['Course'].at[n, 'targets'] = list( zip( * [targets[key] for key in targets]))
-        colleges[college] = instances
-    return colleges
-
-
-# ANCHOR: scrape_course_dept_and_seq()
-def scrape_course_dept_and_seq(pdf, pageid, x0, y0, x1, y1):
-    """
-    For a particular semester / bbox area, returns two ordered lists of dicts:
-    course departments and course sequence numbers. Dicts contain the metadata
-    for each dept/seq.
-
-    Args:
-        pdf: loaded pdfquery pdf object
-        pageid: the page of the transcript to scrape
-        x0, y0, x1, y1: bbox coordinates to scrape from
-
-    """
+# ANCHOR: scrape_course_bbox()
+def scrape_course_bbox(pdf, x0, y0, x1, y1, pageid):
     targets = []
     raw_scrape = pdf.pq('LTTextLineHorizontal:in_bbox("%s, %s, %s, %s")' % \
-                                                        (x0, y0, x1, y1))
+                                                      (x0, y0, x1, y1))
     for i in raw_scrape:
         if i.iterancestors('LTPage').__next__().layout.pageid == pageid:
             if len(i) > 0:
                 for j in i:
                     if j.text != None and j != None:
                         targets.append(( dict(j.attrib, **{"pageid": pageid,
-                                                        "text": j.text.strip(" ")}
+                                                           "text": j.text.strip(" ")}
                                             )))
             else:
                 if i.text != None and i != None:
                     targets.append(( dict(i.attrib, **{"pageid": pageid,
-                                                    "text": i.text.strip(" ")}
+                                                       "text": i.text.strip(" ")}
                                         )))
 
     depts = [i for i in targets if i['text'].isalpha()]
     seqs = [i for i in targets if i['text'].isnumeric()]
+    courses = zip(depts, seqs)
 
-    return depts, seqs
+    return __prepare_courses(pdf, courses)
 
-
-# ANCHOR: scrape_targets()
-def scrape_targets(pdf, x0, y0, y1, pageid):
-    """
-    Scrapes the description/title, attempted, earned, grade, and points for a given course.
-
-    Args:
-        pdf: loaded pdfquery pdf object
-        x0: initial x-position to begin iteratively scraping targets
-        y0: lower y-coordinate of scraped bbox
-        y1: upper y-coordinate of scraped bbox
-        pageid: the page of the transcript to scrape
-    """
-    # generate pairs of (x0, x1)---the start and stop x-coordinates for each target instance
-    labels = ["description", "attempted", "earned", "grade", "points"]
-    xs_ = [float(x0)+i for i in [-1, 75, 103, 140, 169, 212]]
-    xs_ = list(zip(xs_, xs_[1:]))
-    xs = {labels[i]:xs_[i] for i in range(5)}
-    targets = {label:None for label in labels}
-    for label in xs.keys():
-        x0 = float(xs[label][0])-1
-        y0 = float(y0)-1
-        x1 = float(xs[label][1])+1
-        y1 = float(y1)+1
-        raw_scrape = pdf.pq('LTTextLineHorizontal:in_bbox("%s, %s, %s, %s")' % \
-                                                                (x0, y0, x1, y1))
-        for i in raw_scrape:
-            if i.iterancestors('LTPage').__next__().layout.pageid == pageid:
-                if len(i) > 0:
-                    for j in i:
-                        if j!=None and j.text!=None:
-                            targets[label] = dict(j.attrib, **{"text": j.text.strip(" "),
-                                                            "pageid": pageid})
-                else:
-                    if i!=None and i.text!=None:
-                        targets[label] = dict(i.attrib, **{"text": i.text.strip(" "),
-                                                        "pageid": pageid})
-    return targets
 
 def prepare_records(pdf, colleges):
     """

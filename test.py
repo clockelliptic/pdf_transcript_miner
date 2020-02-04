@@ -9,42 +9,34 @@ from time import time
 pdf_filepath = 'C:\\Users\\allen\\Documents\\GitHub\\Upwork\\cc_transcript\\dev\\data\\sample2.pdf'
 outfile_path = 'C:\\Users\\allen\\Documents\\GitHub\\Upwork\\cc_transcript\\dev\\csv_out\\sample2.csv'
 
-#%% ANCHOR: Load and validate PDF
+#%% ANCHOR:
 pdf = pq.PDFQuery(pdf_filepath)
 pdf.load()
 
 if not tm.valid_pdf(pdf):
     print(" ** PDF IS INVALID ** ")
 
-#%% ANCHOR: Scrape figures (pages)
+#%% ANCHOR:
 figures = pdf.pq('LTFigure')
 
-#%% ANCHOR: Scrape 'Beginning' labels to locate college sections
-beginning_labels = tm.define_college_sections(pdf, figures)
+#%% ANCHOR:
+colleges = tm.define_college_sections(pdf, figures)
 
-#%% ANCHOR: Scrape the rest of the labels (Course, Attempted, Grade....)
-label_instances = tm.scrape_labels(pdf, beginning_labels, figures)
+#%% ANCHOR:
+semesters = tm.scrape_semesters_and_plans(pdf, figures)
 
-#%% ANCHOR: Clean the labels, remove unneeeded instances, etc.
-label_instances = tm.clean_labels(label_instances)
+#%%
+colleges = tm.group_semesters_by_college(colleges, semesters)
 
-#%% ANCHOR: Group label instances according to their respective college-section
-colleges = tm.group_label_instances_by_college(label_instances)
+#%%
+colleges = tm.scrape_courses(pdf, colleges)
 
-#%% ANCHOR: Scrape the names of the semesterly learning Plans
-colleges = tm.scrape_plans(pdf, colleges)
 
-#%% ANCHOR: Scrape target data (course departments, course numbers, descriptions, credits, points, etc.)
-colleges = tm.scrape_course_targets(pdf, colleges)
 
-#%% ANCHOR: Dump data to CSV file
-tm.gen_csv(pdf, colleges, outfile_path)
-
-#%% ANCHOR: Visualize scraped data with image-reconstruction of transcript
-npages=len(figures)
-
-fig, ax = tplot.setup_plot(npages)
-tplot.plot_transcript(fig, ax, pdf, npages, colleges)
-
+#%%
+t = time()
+pdf = pq.PDFQuery('C:\\Users\\allen\\Documents\\GitHub\\Upwork\\cc_transcript\\dev\\data\\scccatalog.pdf')
+pdf.load()
+print(time()-t)
 
 #%%

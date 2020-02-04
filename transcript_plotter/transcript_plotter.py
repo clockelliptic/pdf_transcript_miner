@@ -25,7 +25,7 @@ def setup_plot(npages):
     return FIG, AX
 
 # bbox and text COLORS for image-reconstruction of scraped pdf targets
-COLORS = {'Beginning':"red", 'Plan':"yellow",
+COLORS = {'College':"red", 'Plan':"yellow",
           'Course':"green", 'Description':"blue", 'Grade':"indigo",
           'Attempted':"violet", 'Earned':"magenta", 'Points':"cyan",
           'semester':"purple"}
@@ -48,8 +48,8 @@ def drawcollegelabels(FIG, AX, instances):
             rect = mpatches.Rectangle((x, y), w, h, edgecolor=COLORS[key])
             AX[pageid].add_artist(rect), AX[pageid].draw_artist(rect)
             #AX[pageid].text(x, y, ("(%s)(%s, %s)"% (n, x,y))+text, fontsize=8, color=COLORS[key])
-            #AX[pageid].text(x, y, ("(%s)(%s, %s)"% (n,x,y))+text[0:5], color=COLORS[key])
-            AX[pageid].text(x, y-1, ("%s"% (row.text)), fontsize=9, color=COLORS[key])
+            AX[pageid].text(x, y, ("(%s, %s)"% (x,y)), fontsize=7, color=COLORS[key])
+            #AX[pageid].text(x, y-1, ("%s"% (row.text)), fontsize=9, color=COLORS[key])
 
 def drawbbox(FIG, AX, i, x0, y0, x1, y1, bboxcolor):
     w = x1 - x0
@@ -144,11 +144,12 @@ def draw_course_targets(FIG, AX, colleges):
                 for target_instance in course_targets_dict:
                     if target_instance != None:
                         i = target_instance['pageid'] - 1
-                        x = target_instance['x0']
-                        y = target_instance['y0']
+                        x = round(float(target_instance['x0']))
+                        y = round(float(target_instance['y0']))
                         textcolor = "black"
                         text = target_instance['text']
-                        AX[int(i)].text(float(x), float(y), text, fontsize=9, color=textcolor)
+                        #AX[int(i)].text(float(x), float(y), text, fontsize=7, color=textcolor)
+                        AX[int(i)].text(x, y, "(%s, %s)" % (x, y), fontsize=7, color=textcolor)
                     else:
                         continue
 
@@ -250,7 +251,7 @@ def plot_transcript(FIG, AX, pdf, npages, colleges):
         drawpage(FIG, AX, i)
 
     for college in colleges:
-        df = colleges[college]["Beginning"]
+        df = colleges[college]["College"]
         instances = colleges[college]
 
         drawcollegelabels(FIG, AX, instances)

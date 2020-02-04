@@ -1,4 +1,11 @@
- -- ENVIRONMENT SETUP --
+** Production Instructions **
+
+Dev branch is configured to compile to a single-file executable using Nuitka compiler. 
+
+Cython should also compile the utility without hassle.
+
+-------------------------------------------------------------------------------------
+**-- ENVIRONMENT SETUP --**
 
 1. Install conda or miniconda, be sure to add it to your system path
 2. From the command line, navigate to the /dev/ folder

@@ -1,4 +1,4 @@
-** Production Instructions **
+**Production Instructions**
 
 Dev branch is configured to compile to a single-file executable using Nuitka compiler. 
 

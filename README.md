@@ -3,4 +3,4 @@ Community College transcript data-mining utility for processing student transcri
 
 
 
-View gh-pages documentation here: https://clockelliptic.github.io/pdf_transcript_miner/ 
+View dev/maintenance documentation here on gh-pages: https://clockelliptic.github.io/pdf_transcript_miner/ 

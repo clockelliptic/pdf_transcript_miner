@@ -1,0 +1,1 @@
+**OPEN THE** `product` **DIRECTORY**

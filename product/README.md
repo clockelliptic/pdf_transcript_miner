@@ -1,6 +1,6 @@
  -- DEMO Instructions --
 
-1. Open the `'Documentation'` directory and read `'Instructions.html'` (or visit the github page for this repo). A Jupyter Notebook version of the Instructions file can also be found in this directory.
+1. Open the `'Documentation'` directory and read `'Instructions.html'` (or visit the github page for this repo: https://clockelliptic.github.io/pdf_transcript_miner/). A Jupyter Notebook version of the Instructions file can also be found in this directory.
 
 2. In two new windows, open the folder `'main/csv_out'` and the folder `'main/data'`
 

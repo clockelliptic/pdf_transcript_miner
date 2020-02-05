@@ -10,9 +10,11 @@
 
 3. Type the following three commands one at a time. When a command has finished running, the resulting CSV file will appear in the `'main/csv_out'` folder.
 
-	`main.exe "data/sample0.pdf" "csv_out/sample0_out.csv"`
-	`main.exe "data/sample1.pdf" "csv_out/sample1_out.csv"`
-	`main.exe "data/sample2.pdf" "csv_out/sample2_out.csv"`
+```
+	main.exe "data/sample0.pdf" "csv_out/sample0_out.csv"
+	main.exe "data/sample1.pdf" "csv_out/sample1_out.csv"
+	main.exe "data/sample2.pdf" "csv_out/sample2_out.csv"
+```
 
 4. Run the following two commands to demonstrate error handling of corrupt and invalid PDF files:
 
@@ -23,7 +25,7 @@
 
 Use the following command to extract `bad_file2.pdf` (a 39MB book) to demonstrate the vulnerability. You will have to force the process to stop.
 
-	``main.exe "data/bad_file2.pdf" "csv_out/bad.csv"`
+	`main.exe "data/bad_file2.pdf" "csv_out/bad.csv"
 
 
 6. A quick StackOverflow search shows that the extraction program can be executed from php with the following command:
